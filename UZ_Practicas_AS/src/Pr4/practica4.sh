@@ -44,9 +44,9 @@ then
 
     cat "$3" | while read ip # Leemos las ips de las máquinas
     do
-        if ssh -i ~/.ssh/id_as_ed25519-n -N as@$ip # Solo lo ejecutamos si conseguimos conectarnos a la máquina
+        if ssh -i ~/.ssh/id_as_ed25519 -o ConnectTimeout=5 as@$ip exit 0 # Solo lo ejecutamos si conseguimos conectarnos a la máquina
         then
-            caducidad=$(ssh -i ~/.ssh/id_as_ed25519as@$ip date -I --date "+30 days") # La fecha actual puede ser distinta para cada máquina
+            caducidad=$(ssh -i ~/.ssh/id_as_ed25519 as@$ip date -I --date "+30 days") # La fecha actual puede ser distinta para cada máquina
 
             cat "$2" | while read usuario contrasenia nombre_completo
             do
@@ -55,23 +55,25 @@ then
                     echo "Campo invalido"
                     continue
                 fi
+                    # Enviamos todo el código a una bash creada en la máquina
+                    log=$(ssh -i ~/.ssh/id_as_ed25519 as@$ip bash -c "
+                            if grep -q "^$usuario:" /etc/passwd
+                            then
+                                echo "El usuario $usuario ya existe en $ip"
+                            else
+                                useradd -m -k /etc/skel -e "$caducidad" -K UID_MIN=1815 -U "$usuario"
+                                echo "$usuario:$contrasenia" | chpasswd
+                                chage -M 30 "$usuario"
+                                echo "$usuario ha sido creado en $ip"
+                            fi
+                        ")
 
-                # Usamos grep para ver si está en el archivo de usuarios
-                if ssh -i ~/.ssh/id_as_ed25519as@$ip cat /etc/passwd | grep -q "$usuario:"
-                then
-                    # Si está, solo lo escribimos en el log
-                    echo "El usuario $usuario ya existe en $ip"
-                    echo "El usuario $usuario ya existe en $ip" >> "$fich_log"
-                else
-                    # Si no está, creamos el usuario
-                    ssh -i ~/.ssh/id_as_ed25519as@$ip useradd -m -k "/etc/skel -e $caducidad -K UID_MIN=1815 -U "$usuario""
-                    echo "$usuario:$contrasenia" | ssh -i ~/.ssh/id_as_ed25519as@$ip chpasswd
-                    ssh -i ~/.ssh/id_as_ed25519as@$ip chage -M 30 "$usuario"
-                    echo "$usuario ha sido creado en $ip"
-                    echo "$usuario ha sido creado en $ip" >> "$fich_log"
+                    # Mostramos por pantalla y en fich_log el resultado
+                    echo "$log"
+                    echo "$log" >> "$fich_log"
                 fi
+
             done
-            ~. #Salimos del ssh
         else
             echo “$ip no es accesible”
         fi
@@ -81,26 +83,28 @@ else #Si se usa el parámetro "-s"
 
     cat "$3" | while read ip # Leemos las ips de las máquinas
     do
-        if ssh -i ~/.ssh/id_as_ed25519-n -N as@$ip # Solo lo ejecutamos si conseguimos conectarnos a la máquina
+        # Solo lo ejecutamos si conseguimos conectarnos a la máquina
+        if ssh -i ~/.ssh/id_as_ed25519 -o ConnectTimeout=5 as@$ip exit 0
         then
-            if ssh -i ~/.ssh/id_as_ed25519as@$ip test ! -d /extra/backup/ #Comprobamos si existe el directorio backup
+            # Comprobamos si existe el directorio backup
+            if ssh -i ~/.ssh/id_as_ed25519 as@$ip test ! -d /extra/backup/
             then
-                ssh -i ~/.ssh/id_as_ed25519as@$ip mkdir -p /extra/backup #Creamos el directorio de backup
+                ssh -i ~/.ssh/id_as_ed25519 as@$ip mkdir -p /extra/backup #Creamos el directorio de backup
             fi
 
-            ssh -i ~/.ssh/id_as_ed25519as@$ip cat "$2" | while read usuario cosas
+            cat "$2" | while read usuario cosas
             do
-                if ssh -i ~/.ssh/id_as_ed25519as@$ip cat /etc/passwd | grep -q "$usuario:" #Comprobamos si existe el usuario
+                # Comprobamos si existe el usuario
+                if ssh -i ~/.ssh/id_as_ed25519 as@$ip grep -q "^$usuario:" /etc/passwd
                 then
-                    ssh -i ~/.ssh/id_as_ed25519as@$ip tar -cf "/extra/backup/$usuario.tar" -C /home "$usuario" #Hacemos tar
+                    ssh -i ~/.ssh/id_as_ed25519 as@$ip tar -cf "/extra/backup/$usuario.tar" -C /home "$usuario" #Hacemos tar
 
                     if [ $? -eq 0 ] #Comprobamos si el anterior comando ha salido bien
                     then
-                        ssh -i ~/.ssh/id_as_ed25519as@$ip userdel -r "$usuario" #Borramos
+                        ssh -i ~/.ssh/id_as_ed25519 as@$ip userdel -r "$usuario" #Borramos
                     fi
                 fi
             done
-            ~. #Salimos del ssh
         fi
     done
 fi
